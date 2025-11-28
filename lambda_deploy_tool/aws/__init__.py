@@ -1,6 +1,6 @@
 # lambda_deploy_tool/aws/init.py
 """
-AWS service managers for lambda-deploy-tool
+AWS service managers for lambda_deploy_tool
 """
 
 from .base import AWSServiceManager

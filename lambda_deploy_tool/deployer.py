@@ -1,6 +1,6 @@
 # lambda_deploy_tool/deployer.py
 """
-Main deployment orchestrator for lambda-deploy-tool
+Main deployment orchestrator for lambda_deploy_tool
 """
 import logging
 from pathlib import Path

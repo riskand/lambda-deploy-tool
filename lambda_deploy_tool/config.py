@@ -1,6 +1,6 @@
 # lambda_deploy_tool/config.py
 """
-Deployment configuration management for lambda-deploy-tool
+Deployment configuration management for lambda_deploy_tool
 """
 import os
 import shutil

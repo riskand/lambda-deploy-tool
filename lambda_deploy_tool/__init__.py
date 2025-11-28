@@ -1,4 +1,4 @@
-# lambda-deploy-tool/__init__.py
+# lambda_deploy_tool/__init__.py
 """
 AWS Lambda Deployment Tool - Reusable package for deploying Lambda functions
 """

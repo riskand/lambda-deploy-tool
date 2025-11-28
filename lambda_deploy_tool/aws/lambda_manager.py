@@ -97,8 +97,8 @@ class LambdaManager(AWSServiceManager):
             MemorySize=memory_size,
             Environment={'Variables': env_vars},
             Tags={
-                'Application': 'lambda-deploy-tool',
-                'ManagedBy': 'lambda-deploy-tool'
+                'Application': 'lambda_deploy_tool',
+                'ManagedBy': 'lambda_deploy_tool'
             },
             max_attempts=3
         )
