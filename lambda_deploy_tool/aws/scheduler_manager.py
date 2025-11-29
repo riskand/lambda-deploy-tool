@@ -1,16 +1,17 @@
-# lambda_deploy_tool/aws/scheduler_manager.py
+# deploy/aws/scheduler_manager.py
 """
 EventBridge Scheduler Manager
+Single Responsibility: Manage EventBridge schedules for Lambda
 """
 import logging
 
-from .base import AWSServiceManager
+from . import AWSServiceManager
 
 logger = logging.getLogger(__name__)
 
 
 class SchedulerManager(AWSServiceManager):
-    """Manages EventBridge Scheduler"""
+    """Manages EventBridge Scheduler (SRP)"""
 
     @property
     def service_name(self) -> str:
@@ -72,7 +73,7 @@ class SchedulerManager(AWSServiceManager):
             ScheduleExpression=schedule_expression,
             Target=target,
             FlexibleTimeWindow=flexible_time_window,
-            Description='Lambda execution schedule'
+            Description='PNPG Watch execution schedule (08:00-21:00 GMT+7, every 15 minutes)'
         )
 
         logger.info(f"✅ Schedule created: {schedule_name}")

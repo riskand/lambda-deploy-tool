@@ -1,18 +1,19 @@
-# lambda_deploy_tool/aws/iam_manager.py
+# deploy/aws/iam_manager.py
 """
 IAM Role and Policy Manager
+Single Responsibility: Manage IAM resources for Lambda
 """
 import json
 import logging
 import time
 
-from .base import AWSServiceManager
+from . import AWSServiceManager
 
 logger = logging.getLogger(__name__)
 
 
 class IAMManager(AWSServiceManager):
-    """Manages IAM roles and policies for Lambda"""
+    """Manages IAM roles and policies for Lambda (SRP)"""
 
     @property
     def service_name(self) -> str:
@@ -45,7 +46,7 @@ class IAMManager(AWSServiceManager):
             'create_role',
             RoleName=role_name,
             AssumeRolePolicyDocument=json.dumps(trust_policy),
-            Description='Execution role for Lambda function'
+            Description='Execution role for PNPG Watch Lambda function'
         )
         logger.info(f"✅ Created IAM role: {role_name}")
 
@@ -67,7 +68,7 @@ class IAMManager(AWSServiceManager):
         """Attach Parameter Store access policy to role"""
         logger.info("Setting up Parameter Store permissions...")
 
-        policy_name = f'{role_name}-ssm-policy'
+        policy_name = 'pnpgwatch-ssm-policy'
         policy_document = {
             "Version": "2012-10-17",
             "Statement": [{
@@ -76,7 +77,7 @@ class IAMManager(AWSServiceManager):
                     "ssm:GetParameter",
                     "ssm:PutParameter"
                 ],
-                "Resource": f"arn:aws:ssm:{self.region}:{account_id}:parameter/*"
+                "Resource": f"arn:aws:ssm:{self.region}:{account_id}:parameter/pnpgwatch/*"
             }]
         }
 
@@ -125,7 +126,7 @@ class IAMManager(AWSServiceManager):
         """Attach budget action policy to role"""
         logger.info("Setting up budget action policy...")
 
-        policy_name = f'{role_name}-budget-actions'
+        policy_name = 'pnpgwatch-budget-actions'
         policy_document = {
             "Version": "2012-10-17",
             "Statement": [{
@@ -188,7 +189,7 @@ class IAMManager(AWSServiceManager):
         logger.info(f"✅ Created scheduler role: {role_name}")
 
         # Attach policy
-        policy_name = f'{role_name}-schedule-policy'
+        policy_name = 'pnpgwatch-schedule-policy'
         policy_document = {
             "Version": "2012-10-17",
             "Statement": [{

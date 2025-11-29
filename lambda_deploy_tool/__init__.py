@@ -1,19 +1,27 @@
 # lambda_deploy_tool/__init__.py
 """
-AWS Lambda Deployment Tool - Reusable package for deploying Lambda functions
+Generic AWS Lambda Deployment Tool
+Reusable, configurable deployment system for AWS Lambda functions
 """
 
 __version__ = "1.0.0"
 
 from .config import DeployConfig
-from .builder import LambdaBuilder
 from .deployer import Deployer
-from .validators import AWSValidator, LambdaPackageValidator
+from .builder import LambdaBuilder
+from .validators import (
+    EnvironmentValidator,
+    TokenValidator,
+    AWSValidator,
+    LambdaPackageValidator
+)
 
 __all__ = [
     'DeployConfig',
-    'LambdaBuilder',
     'Deployer',
+    'LambdaBuilder',
+    'EnvironmentValidator',
+    'TokenValidator',
     'AWSValidator',
     'LambdaPackageValidator',
 ]

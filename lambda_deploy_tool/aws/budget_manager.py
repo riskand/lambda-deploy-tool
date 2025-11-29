@@ -1,5 +1,7 @@
+# deploy/aws/budget_manager.py
 """
 AWS Budget Manager
+Single Responsibility: Manage AWS Budgets with enforcement
 """
 import json
 import logging
@@ -7,13 +9,13 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 
-from .base import AWSServiceManager
+from . import AWSServiceManager
 
 logger = logging.getLogger(__name__)
 
 
 class BudgetManager(AWSServiceManager):
-    """Manages AWS Budgets with cost enforcement"""
+    """Manages AWS Budgets with cost enforcement (SRP)"""
 
     @property
     def service_name(self) -> str:
@@ -55,7 +57,7 @@ class BudgetManager(AWSServiceManager):
 
     def _ensure_sns_topic(self, email: str) -> str:
         """Ensure SNS topic exists and email is subscribed"""
-        topic_name = 'lambda-budget-alerts'
+        topic_name = 'pnpgwatch-budget-alerts'
         topic_arn = f"arn:aws:sns:{self.region}:{self.account_id}:{topic_name}"
 
         logger.info("Setting up SNS topic for budget alerts...")

@@ -1,27 +1,33 @@
-# lambda_deploy_tool/setup.py
+# setup.py
 from setuptools import setup, find_packages
 
-with open('requirements.txt') as f:
-    requirements = f.read().splitlines()
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
 
 setup(
-    name="lambda_deploy_tool",  # Change from "lambda_deploy_tool" to "lambda_deploy_tool"
+    name="lambda-deploy-tool",
     version="1.0.0",
+    author="Luona",
+    description="Generic AWS Lambda deployment tool with budget enforcement",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     packages=find_packages(),
-    install_requires=requirements,
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="A reusable AWS Lambda deployment tool",
-    python_requires=">=3.8",
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
-        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
     ],
+    python_requires=">=3.10",
+    install_requires=[
+        "boto3>=1.28.0",
+        "python-dotenv>=1.0.0",
+    ],
+    entry_points={
+        "console_scripts": [
+            "lambda-deploy=lambda_deploy_tool.cli:main",
+        ],
+    },
 )

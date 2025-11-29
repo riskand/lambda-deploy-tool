@@ -1,16 +1,17 @@
-# lambda_deploy_tool/aws/parameter_store_manager.py
+# deploy/aws/parameter_store_manager.py
 """
 Parameter Store Manager
+Single Responsibility: Manage AWS Systems Manager Parameter Store
 """
 import logging
 
-from .base import AWSServiceManager
+from . import AWSServiceManager
 
 logger = logging.getLogger(__name__)
 
 
 class ParameterStoreManager(AWSServiceManager):
-    """Manages AWS Systems Manager Parameter Store"""
+    """Manages AWS Systems Manager Parameter Store (SRP)"""
 
     @property
     def service_name(self) -> str:
@@ -26,7 +27,7 @@ class ParameterStoreManager(AWSServiceManager):
             Value=token_data,
             Type='SecureString',
             Overwrite=True,
-            Description='Google OAuth tokens for Lambda function'
+            Description='Google OAuth tokens for PNPG Watch'
         )
 
         logger.info("✅ Google token stored securely")

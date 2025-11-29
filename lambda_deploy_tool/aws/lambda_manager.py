@@ -1,19 +1,20 @@
-# lambda_deploy_tool/aws/lambda_manager.py
+# deploy/aws/lambda_manager.py
 """
-Lambda Function Manager
+Lambda Function Manager with explicit imports and enhanced error handling
 """
 import logging
 import time
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-from .base import AWSServiceManager
+# Explicit import to avoid circular dependencies
+from deploy.aws import AWSServiceManager
 
 logger = logging.getLogger(__name__)
 
 
 class LambdaManager(AWSServiceManager):
-    """Manages Lambda function deployment"""
+    """Manages Lambda function deployment with enhanced error handling"""
 
     @property
     def service_name(self) -> str:
@@ -97,8 +98,9 @@ class LambdaManager(AWSServiceManager):
             MemorySize=memory_size,
             Environment={'Variables': env_vars},
             Tags={
-                'Application': 'lambda_deploy_tool',
-                'ManagedBy': 'lambda_deploy_tool'
+                'Application': 'pnpgwatch',
+                'ManagedBy': 'deploy-script',
+                'BudgetEnforced': 'true'
             },
             max_attempts=3
         )
@@ -157,6 +159,7 @@ class LambdaManager(AWSServiceManager):
 
         except Exception as e:
             logger.error(f"❌ Failed to update Lambda function {function_name}: {e}")
+            # TODO: Implement rollback to previous version
             raise
 
     def _validate_lambda_parameters(self, timeout: int, memory_size: int) -> None:
@@ -228,3 +231,42 @@ class LambdaManager(AWSServiceManager):
                 if attempt == max_attempts - 1:
                     raise TimeoutError(f"Failed to check function update status: {e}")
                 time.sleep(2)
+
+    def test_function(self, function_name: str, payload: dict = None) -> bool:
+        """Test Lambda function invocation with comprehensive error handling"""
+        logger.info(f"Testing Lambda function: {function_name}")
+
+        if payload is None:
+            payload = {"test": "deployment_test", "source": "deployer"}
+
+        try:
+            import json
+
+            response = self.safe_call_with_retry(
+                'invoke',
+                FunctionName=function_name,
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload).encode(),
+                max_attempts=2
+            )
+
+            if self.dry_run:
+                logger.info("[DRY-RUN] Would test Lambda function")
+                return True
+
+            status_code = response.get('StatusCode', 0)
+            if status_code == 200:
+                # Check function error
+                if 'FunctionError' in response:
+                    logger.error(f"❌ Lambda test failed with function error: {response.get('FunctionError')}")
+                    return False
+
+                logger.info("✅ Lambda test successful")
+                return True
+            else:
+                logger.error(f"❌ Lambda test failed with status: {status_code}")
+                return False
+
+        except Exception as e:
+            logger.error(f"❌ Lambda test failed: {e}")
+            return False
