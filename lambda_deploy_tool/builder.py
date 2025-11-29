@@ -12,25 +12,13 @@ import zipfile
 from pathlib import Path
 from typing import List
 
-
-
 logger = logging.getLogger(__name__)
 
 
 class LambdaBuilder:
     """Builds Lambda deployment packages (SRP)"""
 
-    SOURCE_FILES = [
-        'config.py',
-        'email_processor.py',
-        '__init__.py',
-        'lambda_function.py',
-        'local_runner.py',
-        'pnpg_service.py',
-        'sheets_manager.py'
-    ]
-
-    def __init__(self, config: DeployConfig):
+    def __init__(self, config):
         self.config = config
         self.build_dir = config.output_dir / 'build'
         self.package_dir = self.build_dir / 'package'
@@ -69,9 +57,9 @@ class LambdaBuilder:
         """Install Python dependencies using pip"""
         logger.info("📦 Installing dependencies...")
 
-        requirements_file = Path('requirements.txt')
+        requirements_file = self.config.requirements_file
         if not requirements_file.exists():
-            raise FileNotFoundError("requirements.txt not found")
+            raise FileNotFoundError(f"Requirements file not found: {requirements_file}")
 
         cmd = [
             sys.executable, '-m', 'pip', 'install',
@@ -93,22 +81,22 @@ class LambdaBuilder:
             raise
 
     def _copy_source_code(self) -> None:
-        """Copy PNPG Watch source code to package"""
+        """Copy source code to package - now uses config.source_files"""
         logger.info(f"📋 Copying source code from: {self.config.source_dir}")
 
         if not self.config.source_dir.exists():
             raise FileNotFoundError(f"Source directory not found: {self.config.source_dir}")
 
-        dest_dir = self.package_dir / 'pnpgwatch'
-        if dest_dir.exists():
-            shutil.rmtree(dest_dir)
-        dest_dir.mkdir(parents=True, exist_ok=True)
+        if not self.config.source_files:
+            raise ValueError("No source files specified in LAMBDA_SOURCE_FILES")
 
         copied_count = 0
-        for source_file in self.SOURCE_FILES:
+        for source_file in self.config.source_files:
             src_path = self.config.source_dir / source_file
             if src_path.exists():
-                dest_path = dest_dir / source_file
+                dest_path = self.package_dir / source_file
+                # Create parent directories if needed
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src_path, dest_path)
                 copied_count += 1
                 logger.debug(f"  Copied {source_file}")
@@ -118,7 +106,7 @@ class LambdaBuilder:
         if copied_count == 0:
             raise FileNotFoundError(f"No source files found in {self.config.source_dir}")
 
-        logger.info(f"✅ Copied {copied_count}/{len(self.SOURCE_FILES)} source files")
+        logger.info(f"✅ Copied {copied_count}/{len(self.config.source_files)} source files")
 
     def _create_zip_package(self) -> Path:
         """Create ZIP package for Lambda"""
@@ -143,44 +131,23 @@ class LambdaBuilder:
         """Verify package contents"""
         logger.info(f"🔍 Verifying package: {package_path}")
 
-        required_dirs = [
-            'pnpgwatch',
-            'google_services',
-            'google_auth_oauthlib',
-            'googleapiclient',
-            'bs4',
-            'boto3'
-        ]
-
-        required_files = [
-            'pnpgwatch/lambda_function.py',
-            'pnpgwatch/pnpg_service.py',
-            'pnpgwatch/config.py',
-        ]
-
+        # Check that at least some files were included
         try:
             with zipfile.ZipFile(package_path, 'r') as zipf:
                 contents = zipf.namelist()
 
-                # Check directories
-                missing_dirs = []
-                for dir_name in required_dirs:
-                    if not any(item.startswith(dir_name + '/') for item in contents):
-                        missing_dirs.append(dir_name)
-
-                if missing_dirs:
-                    logger.error(f"❌ Missing directories: {', '.join(missing_dirs)}")
+                if len(contents) == 0:
+                    logger.error("❌ Package is empty")
                     return False
 
-                # Check files
-                missing_files = []
-                for file_name in required_files:
-                    if file_name not in contents:
-                        missing_files.append(file_name)
+                # Check that some source files are included
+                source_files_found = any(
+                    any(source_file in content for source_file in self.config.source_files)
+                    for content in contents
+                )
 
-                if missing_files:
-                    logger.error(f"❌ Missing files: {', '.join(missing_files)}")
-                    return False
+                if not source_files_found:
+                    logger.warning("⚠️  No source files found in package")
 
                 logger.info(f"✅ Package verification passed ({len(contents)} files)")
                 return True

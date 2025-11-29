@@ -6,14 +6,9 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
-# Explicit imports to avoid circular dependencies
-from .aws.lambda_manager import LambdaManager
-from .aws.iam_manager import IAMManager
-from .aws.parameter_store_manager import ParameterStoreManager
-from .aws.scheduler_manager import SchedulerManager
-from .aws.budget_manager import BudgetManager
+# Import from the same package to avoid circular dependencies
 from .builder import LambdaBuilder
 from .config import DeployConfig
 from .validators import AWSValidator, LambdaPackageValidator
@@ -29,6 +24,7 @@ class Deployer:
     def __init__(self, config: DeployConfig):
         self.config = config
         self.account_id: Optional[str] = None
+        self.package_path: Optional[Path] = None
 
         # Initialize with error handling
         self._initialize_aws_managers()
@@ -43,6 +39,13 @@ class Deployer:
                 raise ValueError("AWS validation failed - cannot get account ID")
 
             self.config.account_id = self.account_id
+
+            # Lazy import to avoid circular imports
+            from .aws.lambda_manager import LambdaManager
+            from .aws.iam_manager import IAMManager
+            from .aws.parameter_store_manager import ParameterStoreManager
+            from .aws.scheduler_manager import SchedulerManager
+            from .aws.budget_manager import BudgetManager
 
             # Initialize AWS service managers
             self.lambda_mgr = LambdaManager(self.config.region, self.config.dry_run)
@@ -270,7 +273,7 @@ class Deployer:
         except Exception as cleanup_error:
             logger.error(f"⚠️ Cleanup failed: {cleanup_error}")
 
-    def build(self):
+    def build(self) -> Path:
         """Build Lambda package (public method for build-only mode)"""
         logger.info("\n📦 Building Lambda Package")
         logger.info("-" * 60)
