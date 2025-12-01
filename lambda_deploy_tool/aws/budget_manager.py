@@ -1,4 +1,4 @@
-# deploy/aws/budget_manager.py
+# lambda_deploy_tool/aws/budget_manager.py
 """
 AWS Budget Manager
 Single Responsibility: Manage AWS Budgets with enforcement

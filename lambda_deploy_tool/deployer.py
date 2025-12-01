@@ -1,4 +1,4 @@
-# deploy/deployer.py (GENERIC - UPDATED WITH SUMMARY)
+# lambda_deploy_tool/deployer.py (GENERIC - UPDATED WITH SUMMARY)
 """
 Generic deployment orchestrator
 """

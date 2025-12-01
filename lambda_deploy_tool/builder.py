@@ -1,4 +1,4 @@
-# deploy/builder.py
+# lambda_deploy_tool/builder.py
 """
 Lambda package builder
 Single Responsibility: Build Lambda deployment packages

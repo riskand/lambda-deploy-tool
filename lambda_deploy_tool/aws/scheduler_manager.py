@@ -1,4 +1,4 @@
-# deploy/aws/scheduler_manager.py
+# lambda_deploy_tool/aws/scheduler_manager.py
 """
 EventBridge Scheduler Manager
 Single Responsibility: Manage EventBridge schedules for Lambda

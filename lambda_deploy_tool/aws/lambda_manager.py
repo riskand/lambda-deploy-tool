@@ -1,4 +1,4 @@
-# deploy/aws/lambda_manager.py
+# lambda_deploy_tool/aws/lambda_manager.py
 """
 Lambda Function Manager with explicit imports and enhanced error handling
 """

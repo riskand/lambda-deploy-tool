@@ -1,4 +1,4 @@
-# deploy/aws/iam_manager.py
+# lambda_deploy_tool/aws/iam_manager.py
 """
 IAM Role and Policy Manager
 Single Responsibility: Manage IAM resources for Lambda

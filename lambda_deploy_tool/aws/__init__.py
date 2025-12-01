@@ -1,4 +1,4 @@
-# deploy/aws/__init__.py
+# lambda_deploy_tool/aws/__init__.py
 """
 AWS service managers - Simplified to avoid circular imports
 """

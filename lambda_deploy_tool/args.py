@@ -1,4 +1,4 @@
-# deploy/args.py
+# lambda_deploy_tool/args.py
 """
 Command line argument parsing for deployment - Class-based for extensibility
 """

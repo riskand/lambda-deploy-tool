@@ -1,4 +1,4 @@
-# deploy/validators.py (GENERIC - No PNPGWatch specific code)
+# lambda_deploy_tool/validators.py (GENERIC - No PNPGWatch specific code)
 """
 Generic validators for AWS Lambda deployment
 Single Responsibility: Each validator checks one thing

@@ -1,4 +1,4 @@
-# deploy/__init__.py
+# lambda_deploy_tool/__init__.py
 """
 AWS Lambda Deployment System for PNPG Watch
 KISS, DRY, SOLID principles applied

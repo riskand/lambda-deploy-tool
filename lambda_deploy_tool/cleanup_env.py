@@ -1,4 +1,4 @@
-# deploy/cleanup_env.py
+# lambda_deploy_tool/cleanup_env.py
 """
 Utility to clean up Lambda environment variables
 """

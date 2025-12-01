@@ -1,4 +1,4 @@
-# deploy/config.py (GENERIC)
+# lambda_deploy_tool/config.py (GENERIC)
 """
 Generic deployment configuration management
 """
