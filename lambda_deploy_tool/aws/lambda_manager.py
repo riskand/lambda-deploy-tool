@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 # Explicit import to avoid circular dependencies
-from deploy.aws import AWSServiceManager
+from . import AWSServiceManager
 
 logger = logging.getLogger(__name__)
 

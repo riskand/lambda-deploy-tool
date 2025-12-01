@@ -7,13 +7,13 @@ from pathlib import Path
 from typing import Optional, List, Tuple, Callable, Any
 
 # Explicit imports to avoid circular dependencies
-from aws.lambda_manager import LambdaManager
-from aws.iam_manager import IAMManager
-from aws.scheduler_manager import SchedulerManager
-from aws.budget_manager import BudgetManager
-from builder import LambdaBuilder
-from config import DeployConfig
-from validators import AWSValidator, LambdaPackageValidator
+from .aws.lambda_manager import LambdaManager
+from .aws.iam_manager import IAMManager
+from .aws.scheduler_manager import SchedulerManager
+from .aws.budget_manager import BudgetManager
+from .builder import LambdaBuilder
+from .config import DeployConfig
+from .validators import AWSValidator, LambdaPackageValidator
 
 logger = logging.getLogger(__name__)
 
