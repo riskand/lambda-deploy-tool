@@ -10,7 +10,9 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
-from typing import List
+from typing import Set, Optional
+
+from .config import DeployConfig
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 class LambdaBuilder:
     """Builds Lambda deployment packages (SRP)"""
 
-    def __init__(self, config):
+    def __init__(self, config: DeployConfig):
         self.config = config
         self.build_dir = config.output_dir / 'build'
         self.package_dir = self.build_dir / 'package'
@@ -35,6 +37,10 @@ class LambdaBuilder:
 
         size_mb = package_path.stat().st_size / (1024 * 1024)
         logger.info(f"✅ Package built: {package_path} ({size_mb:.2f} MB)")
+
+        # Simple AWS limit check
+        if size_mb > 68:
+            logger.warning(f"⚠️  Package size ({size_mb:.2f} MB) is close to AWS 70MB limit")
 
         return package_path
 
@@ -57,9 +63,9 @@ class LambdaBuilder:
         """Install Python dependencies using pip"""
         logger.info("📦 Installing dependencies...")
 
-        requirements_file = self.config.requirements_file
+        requirements_file = Path('requirements.txt')
         if not requirements_file.exists():
-            raise FileNotFoundError(f"Requirements file not found: {requirements_file}")
+            raise FileNotFoundError("requirements.txt not found")
 
         cmd = [
             sys.executable, '-m', 'pip', 'install',
@@ -81,32 +87,67 @@ class LambdaBuilder:
             raise
 
     def _copy_source_code(self) -> None:
-        """Copy source code to package - now uses config.source_files"""
+        """Copy source code from current directory"""
         logger.info(f"📋 Copying source code from: {self.config.source_dir}")
 
         if not self.config.source_dir.exists():
             raise FileNotFoundError(f"Source directory not found: {self.config.source_dir}")
 
-        if not self.config.source_files:
-            raise ValueError("No source files specified in LAMBDA_SOURCE_FILES")
-
         copied_count = 0
-        for source_file in self.config.source_files:
-            src_path = self.config.source_dir / source_file
-            if src_path.exists():
-                dest_path = self.package_dir / source_file
-                # Create parent directories if needed
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_path, dest_path)
+        for item in self.config.source_dir.iterdir():
+            # Skip unnecessary files/patterns
+            if self._should_skip(item):
+                logger.debug(f"  Skipping: {item.name}")
+                continue
+
+            dest_path = self.package_dir / item.name
+
+            if item.is_file():
+                shutil.copy2(item, dest_path)
                 copied_count += 1
-                logger.debug(f"  Copied {source_file}")
-            else:
-                logger.warning(f"  Source file not found: {src_path}")
+                logger.debug(f"  Copied file: {item.name}")
+            elif item.is_dir():
+                # For directories, copy only .py files
+                py_files = list(item.rglob("*.py"))
+                if py_files:
+                    dest_path.mkdir(exist_ok=True)
+                    for py_file in py_files:
+                        rel_path = py_file.relative_to(item)
+                        full_dest = dest_path / rel_path
+                        full_dest.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(py_file, full_dest)
+                        copied_count += 1
+                    logger.debug(f"  Copied {len(py_files)} .py files from: {item.name}")
 
         if copied_count == 0:
             raise FileNotFoundError(f"No source files found in {self.config.source_dir}")
 
-        logger.info(f"✅ Copied {copied_count}/{len(self.config.source_files)} source files")
+        logger.info(f"✅ Copied {copied_count} source files")
+
+    def _should_skip(self, item: Path) -> bool:
+        """Check if item should be skipped"""
+        skip_patterns = {
+            # Build artifacts
+            'dist', 'build', '__pycache__', '.pyc', '.pyo', '.pyd',
+            # Version control
+            '.git', '.gitignore',
+            # Environment
+            '.env', '.env.local', '.env.deploy', 'venv',
+            # Deployment
+            'deploy',  # Skip the deploy directory itself!
+            # Tests
+            'tests', 'test',
+            # Other
+            '.DS_Store', 'node_modules', '.pytest_cache', 'coverage'
+        }
+
+        name = item.name
+        return any(
+            name.startswith(pattern) or
+            name.endswith(pattern) or
+            name == pattern
+            for pattern in skip_patterns
+        )
 
     def _create_zip_package(self) -> Path:
         """Create ZIP package for Lambda"""
@@ -126,32 +167,3 @@ class LambdaBuilder:
 
         logger.debug(f"  Added {file_count} files to package")
         return zip_path
-
-    def verify_package(self, package_path: Path) -> bool:
-        """Verify package contents"""
-        logger.info(f"🔍 Verifying package: {package_path}")
-
-        # Check that at least some files were included
-        try:
-            with zipfile.ZipFile(package_path, 'r') as zipf:
-                contents = zipf.namelist()
-
-                if len(contents) == 0:
-                    logger.error("❌ Package is empty")
-                    return False
-
-                # Check that some source files are included
-                source_files_found = any(
-                    any(source_file in content for source_file in self.config.source_files)
-                    for content in contents
-                )
-
-                if not source_files_found:
-                    logger.warning("⚠️  No source files found in package")
-
-                logger.info(f"✅ Package verification passed ({len(contents)} files)")
-                return True
-
-        except Exception as e:
-            logger.error(f"❌ Error verifying package: {e}")
-            return False

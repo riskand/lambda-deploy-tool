@@ -1,29 +1,30 @@
-# deploy/deployer.py
+# deploy/deployer.py (GENERIC - UPDATED WITH SUMMARY)
 """
-Main deployment orchestrator with fixed imports and error handling
+Generic deployment orchestrator
 """
 import logging
-import os
-import time
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, List, Tuple, Callable, Any
 
-# Import from the same package to avoid circular dependencies
-from .builder import LambdaBuilder
-from .config import DeployConfig
-from .validators import AWSValidator, LambdaPackageValidator
+# Explicit imports to avoid circular dependencies
+from deploy.aws.lambda_manager import LambdaManager
+from deploy.aws.iam_manager import IAMManager
+from deploy.aws.scheduler_manager import SchedulerManager
+from deploy.aws.budget_manager import BudgetManager
+from deploy.builder import LambdaBuilder
+from deploy.config import DeployConfig
+from deploy.validators import AWSValidator, LambdaPackageValidator
 
 logger = logging.getLogger(__name__)
 
 
 class Deployer:
-    """
-    Main deployment orchestrator with comprehensive error handling
-    """
+    """Generic deployment orchestrator"""
 
     def __init__(self, config: DeployConfig):
         self.config = config
         self.account_id: Optional[str] = None
+        self.deployment_steps: List[Tuple[str, Callable]] = []
         self.package_path: Optional[Path] = None
 
         # Initialize with error handling
@@ -40,17 +41,9 @@ class Deployer:
 
             self.config.account_id = self.account_id
 
-            # Lazy import to avoid circular imports
-            from .aws.lambda_manager import LambdaManager
-            from .aws.iam_manager import IAMManager
-            from .aws.parameter_store_manager import ParameterStoreManager
-            from .aws.scheduler_manager import SchedulerManager
-            from .aws.budget_manager import BudgetManager
-
             # Initialize AWS service managers
             self.lambda_mgr = LambdaManager(self.config.region, self.config.dry_run)
             self.iam_mgr = IAMManager(self.config.region, self.config.dry_run)
-            self.param_store_mgr = ParameterStoreManager(self.config.region, self.config.dry_run)
             self.scheduler_mgr = SchedulerManager(self.config.region, self.config.dry_run)
             self.budget_mgr = BudgetManager(self.config.region, self.account_id, self.config.dry_run)
 
@@ -61,24 +54,31 @@ class Deployer:
             logger.error(f"❌ Failed to initialize AWS managers: {e}")
             raise
 
+    def set_deployment_steps(self, steps: List[Tuple[str, Callable]]) -> None:
+        """Set custom deployment steps"""
+        self.deployment_steps = steps
+
+    def get_default_deployment_steps(self) -> List[Tuple[str, Callable]]:
+        """Get default deployment steps (generic)"""
+        return [
+            ("Budget Setup", self._setup_budget_if_needed),
+            ("Build Package", self._build_package),
+            ("Local Test", self._run_local_test_if_enabled),
+            ("IAM Setup", self._setup_iam_roles),
+            ("Lambda Deployment", self._deploy_lambda),
+            ("Schedule Setup", self._setup_schedule)
+        ]
+
     def deploy(self) -> None:
-        """
-        Execute complete deployment with comprehensive error handling
-        """
+        """Execute complete deployment with summary"""
         logger.info("🚀 Starting deployment...")
 
-        try:
-            deployment_steps = [
-                ("Budget Setup", self._setup_budget_if_needed),
-                ("Build Package", self._build_package),
-                ("Local Test", self._run_local_test_if_enabled),
-                ("IAM Setup", self._setup_iam_roles),
-                ("Token Storage", self._store_google_token),
-                ("Lambda Deployment", self._deploy_lambda),
-                ("Schedule Setup", self._setup_schedule)
-            ]
+        # Use custom steps if provided, otherwise use default
+        if not self.deployment_steps:
+            self.deployment_steps = self.get_default_deployment_steps()
 
-            for step_name, step_func in deployment_steps:
+        try:
+            for step_name, step_func in self.deployment_steps:
                 if self._should_skip_step(step_name):
                     continue
 
@@ -89,6 +89,9 @@ class Deployer:
                     raise ValueError(f"Deployment failed at step: {step_name}")
 
             logger.info("✅ Deployment completed successfully!")
+
+            # Show deployment summary
+            self._show_deployment_summary()
 
         except Exception as e:
             logger.error(f"❌ Deployment failed: {e}")
@@ -101,13 +104,12 @@ class Deployer:
             return True
         if step_name == "Local Test" and not self.config.local_test_enabled:
             return True
-        if step_name in ["IAM Setup", "Token Storage", "Lambda Deployment",
-                         "Schedule Setup"] and self.config.local_test_enabled:
+        if step_name in ["IAM Setup", "Lambda Deployment", "Schedule Setup"] and self.config.local_test_enabled:
             return True
         return False
 
     def _execute_step_safely(self, step_name: str, step_func) -> bool:
-        """Execute a deployment step with comprehensive error handling"""
+        """Execute a deployment step with error handling"""
         try:
             step_func()
             return True
@@ -125,11 +127,10 @@ class Deployer:
         try:
             # Create budget action role first
             budget_role_arn = self.iam_mgr.ensure_budget_action_role(
-                'pnpgwatch-budget-action-role',
+                f'{self.config.function_name}-budget-action-role',
                 self.config.account_id
             )
-            self.iam_mgr.attach_budget_action_policy('pnpgwatch-budget-action-role')
-            logger.debug(f"Budget action role ARN: {budget_role_arn}")
+            self.iam_mgr.attach_budget_action_policy(f'{self.config.function_name}-budget-action-role')
 
             # Setup budget with enforcement
             self.budget_mgr.setup_budget_enforcement(
@@ -154,7 +155,20 @@ class Deployer:
             return
 
         logger.info("🧪 Testing Lambda Package Locally")
-        validator = LambdaPackageValidator(self.package_path)
+
+        # Parse handler into module and function
+        if '.' in self.config.handler:
+            handler_module, handler_function = self.config.handler.rsplit('.', 1)
+        else:
+            handler_module = self.config.handler
+            handler_function = 'lambda_handler'
+
+        validator = LambdaPackageValidator(
+            self.package_path,
+            handler_module,
+            handler_function
+        )
+
         if not validator.validate():
             raise ValueError("Local Lambda test failed")
 
@@ -168,45 +182,17 @@ class Deployer:
                 self.config.role_name,
                 self.config.account_id
             )
-            logger.debug(f"Lambda role ARN: {role_arn}")
-
-            # Attach Parameter Store policy
-            self.iam_mgr.attach_parameter_store_policy(
-                self.config.role_name,
-                self.config.account_id
-            )
 
             # Scheduler role
+            scheduler_role_name = f'{self.config.function_name}-schedule-role'
             scheduler_role_arn = self.iam_mgr.ensure_scheduler_role(
-                'pnpgwatch-schedule-role',
+                scheduler_role_name,
                 self.config.account_id,
                 self.config.function_name
             )
-            logger.debug(f"Scheduler role ARN: {scheduler_role_arn}")
 
         except Exception as e:
             logger.error(f"❌ IAM setup failed: {e}")
-            raise
-
-    def _store_google_token(self) -> None:
-        """Store Google OAuth token with error handling"""
-        logger.info("🔐 Storing Google Token")
-
-        try:
-            token_data = os.getenv('GOOGLE_TOKEN_DATA')
-            if not token_data:
-                raise ValueError(
-                    "GOOGLE_TOKEN_DATA not found in environment.\n"
-                    "Make sure it's in your .env file."
-                )
-
-            self.param_store_mgr.store_google_token(
-                self.config.parameter_store_path,
-                token_data
-            )
-
-        except Exception as e:
-            logger.error(f"❌ Token storage failed: {e}")
             raise
 
     def _deploy_lambda(self) -> None:
@@ -220,8 +206,7 @@ class Deployer:
             if not self.config.validate_env_vars_size(env_vars):
                 env_size = sum(len(k) + len(v) for k, v in env_vars.items())
                 raise ValueError(
-                    f"Environment variables exceed Lambda 4KB limit (estimated: {env_size} bytes). "
-                    f"Reduce the number of worksheets or mappings."
+                    f"Environment variables exceed Lambda 4KB limit (estimated: {env_size} bytes)."
                 )
 
             function_arn = self.lambda_mgr.deploy_function(
@@ -246,7 +231,8 @@ class Deployer:
         logger.info("⏰ Setting up EventBridge Schedule")
 
         try:
-            scheduler_role_arn = f"arn:aws:iam::{self.config.account_id}:role/pnpgwatch-schedule-role"
+            scheduler_role_name = f'{self.config.function_name}-schedule-role'
+            scheduler_role_arn = f"arn:aws:iam::{self.config.account_id}:role/{scheduler_role_name}"
 
             self.scheduler_mgr.ensure_schedule(
                 schedule_name=self.config.schedule_name,
@@ -265,20 +251,36 @@ class Deployer:
             return
 
         logger.info("🧹 Cleaning up resources after failure...")
+        # Add cleanup logic here for failed deployments
 
-        try:
-            # Add cleanup logic here for failed deployments
-            # This could include deleting partially created resources
-            pass
-        except Exception as cleanup_error:
-            logger.error(f"⚠️ Cleanup failed: {cleanup_error}")
+    def _show_deployment_summary(self) -> None:
+        """Show deployment summary after successful deployment"""
+        logger.info("\n" + "=" * 60)
+        logger.info("🎉 DEPLOYMENT COMPLETE!")
+        logger.info("=" * 60)
 
-    def build(self) -> Path:
+        # Skip summary for local test mode or dry run
+        if self.config.local_test_enabled or self.config.dry_run:
+            return
+
+        # Show next steps
+        logger.info("\n📝 Next Steps:")
+        logger.info(f"  Test: aws lambda invoke --function-name {self.config.function_name} response.json")
+        logger.info(f"  Logs: aws logs tail /aws/lambda/{self.config.function_name} --follow")
+        logger.info(
+            f"  Monitor: https://console.aws.amazon.com/lambda/home?region={self.config.region}#/functions/{self.config.function_name}")
+
+        # Show budget reminder if enabled
+        if self.config.enable_budget and self.config.budget_email:
+            logger.info(f"\n📧 IMPORTANT: Confirm SNS subscription in {self.config.budget_email}")
+
+    def build(self):
         """Build Lambda package (public method for build-only mode)"""
         logger.info("\n📦 Building Lambda Package")
         logger.info("-" * 60)
 
         package_path = self.builder.build()
+        self.package_path = package_path
 
         # Verify package
         if not self.builder.verify_package(package_path):

@@ -1,9 +1,8 @@
-# deploy/validators.py
+# deploy/validators.py (GENERIC - No PNPGWatch specific code)
 """
-Validators for environment and token validation
+Generic validators for AWS Lambda deployment
 Single Responsibility: Each validator checks one thing
 """
-import asyncio
 import json
 import logging
 import os
@@ -11,134 +10,9 @@ import sys
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Optional
+from typing import Optional, Callable, Any
 
 logger = logging.getLogger(__name__)
-
-
-class EnvironmentValidator:
-    """Validates required environment variables (SRP)"""
-
-    REQUIRED_VARS = [
-        'GOOGLE_OAUTH_CLIENT_ID',
-        'GOOGLE_OAUTH_CLIENT_SECRET',
-    ]
-
-    def validate(self) -> bool:
-        """Validate all required environment variables"""
-        logger.info("Validating environment variables...")
-
-        # Check OAuth credentials
-        missing_vars = []
-        for var in self.REQUIRED_VARS:
-            if not os.getenv(var):
-                missing_vars.append(var)
-
-        if missing_vars:
-            logger.error(f"❌ Missing environment variables: {', '.join(missing_vars)}")
-            logger.info("💡 Please check your .env file")
-            return False
-
-        logger.info("✅ OAuth credentials found")
-
-        # Check worksheet configuration
-        worksheet_vars = [var for var in os.environ.keys() if var.startswith('PNPG_WORKSHEET_')]
-        if not worksheet_vars:
-            logger.error("❌ No PNPG_WORKSHEET_* environment variables found")
-            logger.info("💡 Example: PNPG_WORKSHEET_KEDOYA=your_sheet_id_here")
-            return False
-
-        logger.info(f"✅ Found {len(worksheet_vars)} worksheet(s)")
-
-        # Check mapping configuration
-        mapping_vars = [var for var in os.environ.keys() if var.startswith('PNPG_MAPPING_')]
-        if not mapping_vars:
-            logger.error("❌ No PNPG_MAPPING_* environment variables found")
-            logger.info("💡 Example: PNPG_MAPPING_KEDOYA=Pick n Go Jakarta Barat")
-            return False
-
-        logger.info(f"✅ Found {len(mapping_vars)} mapping(s)")
-
-        return True
-
-
-class TokenValidator:
-    """Validates Google OAuth token (SRP)"""
-
-    def validate(self) -> bool:
-        """Validate Google token (matches validate_token.py logic)"""
-        logger.info("Validating Google OAuth token...")
-
-        token_data_str = os.getenv('GOOGLE_TOKEN_DATA')
-        if not token_data_str:
-            logger.error("❌ GOOGLE_TOKEN_DATA not found in environment")
-            logger.info("💡 Please run local_runner.py first to authenticate:")
-            logger.info("   python -m pnpgwatch.local_runner")
-            return False
-
-        # Validate JSON format
-        try:
-            token_data = json.loads(token_data_str)
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ GOOGLE_TOKEN_DATA is not valid JSON: {e}")
-            return False
-
-        logger.info("✅ Token format is valid JSON")
-
-        # Check required fields
-        required_fields = ['token', 'refresh_token', 'token_uri', 'client_id', 'client_secret', 'scopes']
-        missing_fields = [field for field in required_fields if field not in token_data]
-
-        if missing_fields:
-            logger.error(f"❌ Token missing required fields: {', '.join(missing_fields)}")
-            return False
-
-        logger.info("✅ Token contains all required fields")
-
-        # Test token with Gmail API (like validate_token.py does)
-        if not self._test_token_with_api():
-            logger.error("❌ Token validation failed with Gmail API")
-            logger.info("💡 The token may be expired or invalid. Please re-authenticate:")
-            logger.info("   python -m pnpgwatch.local_runner")
-            return False
-
-        logger.info("✅ Token validated successfully with Gmail API")
-        return True
-
-    def _test_token_with_api(self) -> bool:
-        """Test token by making a Gmail API call"""
-        try:
-            return asyncio.run(self._async_test_token())
-        except Exception as e:
-            logger.error(f"Error testing token: {e}")
-            return False
-
-    async def _async_test_token(self) -> bool:
-        """Async token test with Gmail API (matches validate_token.py)"""
-        try:
-            from google_services import GmailService, get_token_storage
-
-            # Use the same token storage factory as local_runner
-            token_storage = get_token_storage()
-            gmail_service = GmailService(token_storage=token_storage)
-
-            logger.debug("🔍 Testing token with Gmail API...")
-            await gmail_service.ensure_authenticated()
-
-            # Try a simple API call - use safe_api_call which handles async properly
-            logger.debug("Testing API call...")
-            profile = await gmail_service.safe_api_call(
-                gmail_service.service.users().getProfile,
-                userId='me'
-            )
-
-            email = profile.get('emailAddress')
-            logger.debug(f"Connected as: {email}")
-            return True
-
-        except Exception as e:
-            logger.debug(f"Token test failed: {e}")
-            return False
 
 
 class AWSValidator:
@@ -151,7 +25,6 @@ class AWSValidator:
         """
         Validate AWS credentials and return account ID
         Returns account ID on success, None on failure
-        Matches shell script logic: "aws sts get-caller-identity"
         """
         logger.info("Validating AWS credentials...")
 
@@ -182,14 +55,16 @@ class AWSValidator:
 
 
 class LambdaPackageValidator:
-    """Validates Lambda package locally (SRP)"""
+    """Validates Lambda package locally (Generic - SRP)"""
 
-    def __init__(self, package_path: Path):
+    def __init__(self, package_path: Path, handler_module: str, handler_function: str):
         self.package_path = package_path
+        self.handler_module = handler_module
+        self.handler_function = handler_function
 
     def validate(self) -> bool:
         """Test Lambda package locally"""
-        logger.info("Testing Lambda package locally...")
+        logger.info(f"Testing Lambda package locally...")
 
         if not self.package_path.exists():
             logger.error(f"❌ Package not found: {self.package_path}")
@@ -198,7 +73,7 @@ class LambdaPackageValidator:
         return self._test_lambda_handler()
 
     def _test_lambda_handler(self) -> bool:
-        """Test Lambda handler with local execution"""
+        """Test Lambda handler with local execution (Generic)"""
         try:
             with TemporaryDirectory() as temp_dir:
                 # Extract package
@@ -209,7 +84,12 @@ class LambdaPackageValidator:
                 sys.path.insert(0, temp_dir)
 
                 try:
-                    from pnpgwatch.lambda_function import lambda_handler
+                    # Dynamically import the handler module
+                    import importlib
+                    module = importlib.import_module(self.handler_module)
+
+                    # Get the handler function
+                    handler = getattr(module, self.handler_function)
 
                     # Create test event and mock context
                     test_event = {
@@ -219,24 +99,30 @@ class LambdaPackageValidator:
 
                     class MockContext:
                         def __init__(self):
-                            self.function_name = "pnpg-watch-local-test"
+                            self.function_name = "lambda-local-test"
                             self.memory_limit_in_mb = 512
                             self.remaining_time_in_millis = lambda: 300000
                             self.function_version = "$LATEST"
-                            self.invoked_function_arn = "arn:aws:lambda:us-east-1:123456789012:function:pnpg-watch-local-test"
+                            self.invoked_function_arn = "arn:aws:lambda:us-east-1:123456789012:function:lambda-local-test"
                             self.aws_request_id = "test-request-id"
 
                     # Invoke handler
-                    logger.info("Invoking Lambda handler locally...")
-                    result = lambda_handler(test_event, MockContext())
+                    logger.info(f"Invoking Lambda handler {self.handler_module}.{self.handler_function} locally...")
+                    result = handler(test_event, MockContext())
 
-                    if result and result.get('statusCode') == 200:
-                        logger.info("✅ Local Lambda test passed")
+                    if result:
+                        logger.info(f"✅ Local Lambda test passed. Handler returned: {result}")
                         return True
                     else:
-                        logger.error(f"❌ Local Lambda test failed: {result}")
+                        logger.error(f"❌ Local Lambda test failed: Handler returned None")
                         return False
 
+                except ImportError as e:
+                    logger.error(f"❌ Failed to import handler module '{self.handler_module}': {e}")
+                    return False
+                except AttributeError as e:
+                    logger.error(f"❌ Handler function '{self.handler_function}' not found: {e}")
+                    return False
                 finally:
                     # Cleanup
                     if temp_dir in sys.path:
@@ -247,3 +133,37 @@ class LambdaPackageValidator:
             import traceback
             logger.debug(traceback.format_exc())
             return False
+
+
+class EnvironmentVariableValidator:
+    """Generic environment variable validator (SRP)"""
+
+    def __init__(self, required_vars: list, optional_vars: list = None):
+        self.required_vars = required_vars
+        self.optional_vars = optional_vars or []
+
+    def validate(self) -> bool:
+        """Validate environment variables"""
+        logger.info("Validating environment variables...")
+
+        missing_vars = []
+        for var in self.required_vars:
+            if not os.getenv(var):
+                missing_vars.append(var)
+
+        if missing_vars:
+            logger.error(f"❌ Missing required environment variables: {', '.join(missing_vars)}")
+            return False
+
+        logger.info(f"✅ Found {len(self.required_vars)} required environment variables")
+
+        # Check optional variables (warn if missing)
+        missing_optional = []
+        for var in self.optional_vars:
+            if not os.getenv(var):
+                missing_optional.append(var)
+
+        if missing_optional:
+            logger.warning(f"⚠️  Missing optional environment variables: {', '.join(missing_optional)}")
+
+        return True

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 # Explicit import to avoid circular dependencies
-from . import AWSServiceManager
+from deploy.aws import AWSServiceManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class LambdaManager(AWSServiceManager):
             runtime: str,
             timeout: int,
             memory_size: int,
-            env_vars: Dict[str, str],
+            env_vars: dict,
             package_path: Path
     ) -> str:
         """
@@ -78,7 +78,7 @@ class LambdaManager(AWSServiceManager):
             runtime: str,
             timeout: int,
             memory_size: int,
-            env_vars: Dict[str, str],
+            env_vars: dict,
             zip_content: bytes
     ) -> str:
         """Create new Lambda function with validation"""
@@ -117,7 +117,7 @@ class LambdaManager(AWSServiceManager):
     def _update_function(
             self,
             function_name: str,
-            env_vars: Dict[str, str],
+            env_vars: dict,
             timeout: int,
             memory_size: int,
             zip_content: bytes
@@ -232,7 +232,7 @@ class LambdaManager(AWSServiceManager):
                     raise TimeoutError(f"Failed to check function update status: {e}")
                 time.sleep(2)
 
-    def test_function(self, function_name: str, payload: Optional[Dict[str, Any]] = None) -> bool:
+    def test_function(self, function_name: str, payload: dict = None) -> bool:
         """Test Lambda function invocation with comprehensive error handling"""
         logger.info(f"Testing Lambda function: {function_name}")
 
