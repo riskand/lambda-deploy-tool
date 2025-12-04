@@ -46,7 +46,7 @@ class IAMManager(AWSServiceManager):
             'create_role',
             RoleName=role_name,
             AssumeRolePolicyDocument=json.dumps(trust_policy),
-            Description='Execution role for PNPG Watch Lambda function'
+            Description='Execution role for Lambda function'
         )
         logger.info(f"✅ Created IAM role: {role_name}")
 
@@ -64,22 +64,16 @@ class IAMManager(AWSServiceManager):
 
         return role_arn
 
-    def attach_parameter_store_policy(self, role_name: str, account_id: str) -> None:
-        """Attach Parameter Store access policy to role"""
-        logger.info("Setting up Parameter Store permissions...")
+    def attach_inline_policy(self, role_name: str, policy_name: str, policy_document: dict) -> None:
+        """
+        Attach inline policy to role (GENERIC method)
 
-        policy_name = 'pnpgwatch-ssm-policy'
-        policy_document = {
-            "Version": "2012-10-17",
-            "Statement": [{
-                "Effect": "Allow",
-                "Action": [
-                    "ssm:GetParameter",
-                    "ssm:PutParameter"
-                ],
-                "Resource": f"arn:aws:ssm:{self.region}:{account_id}:parameter/pnpgwatch/*"
-            }]
-        }
+        Args:
+            role_name: IAM role name
+            policy_name: Name for the inline policy
+            policy_document: IAM policy document as dict
+        """
+        logger.info(f"Attaching inline policy '{policy_name}' to role '{role_name}'...")
 
         self.safe_call(
             'put_role_policy',
@@ -87,7 +81,11 @@ class IAMManager(AWSServiceManager):
             PolicyName=policy_name,
             PolicyDocument=json.dumps(policy_document)
         )
-        logger.info("✅ Parameter Store policy attached")
+        logger.info(f"✅ Inline policy '{policy_name}' attached")
+
+        # Wait for policy to propagate
+        if not self.dry_run:
+            time.sleep(5)
 
     def ensure_budget_action_role(self, role_name: str, account_id: str) -> str:
         """
@@ -126,7 +124,7 @@ class IAMManager(AWSServiceManager):
         """Attach budget action policy to role"""
         logger.info("Setting up budget action policy...")
 
-        policy_name = 'pnpgwatch-budget-actions'
+        policy_name = 'budget-actions'
         policy_document = {
             "Version": "2012-10-17",
             "Statement": [{
@@ -140,12 +138,7 @@ class IAMManager(AWSServiceManager):
             }]
         }
 
-        self.safe_call(
-            'put_role_policy',
-            RoleName=role_name,
-            PolicyName=policy_name,
-            PolicyDocument=json.dumps(policy_document)
-        )
+        self.attach_inline_policy(role_name, policy_name, policy_document)
         logger.info("✅ Budget action policy attached")
 
         # Wait for policy to propagate
@@ -189,7 +182,7 @@ class IAMManager(AWSServiceManager):
         logger.info(f"✅ Created scheduler role: {role_name}")
 
         # Attach policy
-        policy_name = 'pnpgwatch-schedule-policy'
+        policy_name = 'schedule-policy'
         policy_document = {
             "Version": "2012-10-17",
             "Statement": [{
@@ -199,12 +192,7 @@ class IAMManager(AWSServiceManager):
             }]
         }
 
-        self.safe_call(
-            'put_role_policy',
-            RoleName=role_name,
-            PolicyName=policy_name,
-            PolicyDocument=json.dumps(policy_document)
-        )
+        self.attach_inline_policy(role_name, policy_name, policy_document)
         logger.info("✅ Scheduler policy attached")
 
         # Wait for role to be available
