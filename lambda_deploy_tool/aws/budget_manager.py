@@ -34,17 +34,26 @@ class BudgetManager(AWSServiceManager):
         return self._sns_client
 
     def setup_budget_enforcement(
-        self,
-        budget_name: str,
-        budget_limit: float,
-        email: str,
-        budget_action_role_arn: str
+            self,
+            budget_name: str,
+            budget_limit: float,
+            email: str,
+            budget_action_role_arn: str,
+            sns_topic_name: str = None
     ) -> None:
         """Setup complete budget enforcement with email alerts"""
         logger.info(f"💰 Setting up budget enforcement: ${budget_limit}/month")
 
+        # Use provided topic name or default to budget_name based
+        if not sns_topic_name:
+            # Create a safe topic name from budget name
+            safe_name = budget_name.lower().replace(' ', '-').replace('_', '-')
+            sns_topic_name = f"{safe_name}-alerts"
+
+        logger.info(f"📧 Using SNS topic: {sns_topic_name}")
+
         # Create SNS topic and subscribe email
-        topic_arn = self._ensure_sns_topic(email)
+        topic_arn = self._ensure_sns_topic(email, sns_topic_name)
 
         # Create or update budget with notifications
         self._ensure_budget_with_notifications(
@@ -55,12 +64,11 @@ class BudgetManager(AWSServiceManager):
         logger.info(f"   • 80% threshold: Email warning to {email}")
         logger.info(f"   • 100% threshold: Lambda function AUTOMATICALLY DISABLED")
 
-    def _ensure_sns_topic(self, email: str) -> str:
+    def _ensure_sns_topic(self, email: str, topic_name: str) -> str:
         """Ensure SNS topic exists and email is subscribed"""
-        topic_name = 'pnpgwatch-budget-alerts'
         topic_arn = f"arn:aws:sns:{self.region}:{self.account_id}:{topic_name}"
 
-        logger.info("Setting up SNS topic for budget alerts...")
+        logger.info(f"Setting up SNS topic: {topic_name}...")
 
         # Create topic if it doesn't exist
         try:
@@ -107,11 +115,11 @@ class BudgetManager(AWSServiceManager):
             return False
 
     def _ensure_budget_with_notifications(
-        self,
-        budget_name: str,
-        budget_limit: float,
-        sns_topic_arn: str,
-        budget_action_role_arn: str
+            self,
+            budget_name: str,
+            budget_limit: float,
+            sns_topic_arn: str,
+            budget_action_role_arn: str
     ) -> None:
         """Create or update budget with notifications and actions"""
         logger.info(f"Configuring budget: {budget_name}")
@@ -186,10 +194,10 @@ class BudgetManager(AWSServiceManager):
             return False
 
     def _create_budget(
-        self,
-        budget_name: str,
-        budget_definition: dict,
-        notifications: list
+            self,
+            budget_name: str,
+            budget_definition: dict,
+            notifications: list
     ) -> None:
         """Create new budget"""
         logger.info("Creating new budget...")

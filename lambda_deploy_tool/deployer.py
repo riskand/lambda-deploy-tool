@@ -137,7 +137,8 @@ class Deployer:
                 budget_name=self.config.budget_name,
                 budget_limit=self.config.budget_limit,
                 email=self.config.budget_email,
-                budget_action_role_arn=budget_role_arn
+                budget_action_role_arn=budget_role_arn,
+                sns_topic_name=self.config.budget_topic_name  # ADDED: Pass topic name
             )
 
         except Exception as e:
@@ -273,6 +274,8 @@ class Deployer:
         # Show budget reminder if enabled
         if self.config.enable_budget and self.config.budget_email:
             logger.info(f"\n📧 IMPORTANT: Confirm SNS subscription in {self.config.budget_email}")
+            if hasattr(self.config, 'budget_topic_name') and self.config.budget_topic_name:
+                logger.info(f"  SNS Topic: {self.config.budget_topic_name}")
 
     def build(self):
         """Build Lambda package (public method for build-only mode)"""

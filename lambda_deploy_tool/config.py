@@ -42,6 +42,7 @@ class DeployConfig:
     budget_name: str = 'Lambda Function Budget'
     budget_limit: float = 1.00
     budget_email: Optional[str] = None
+    budget_topic_name: str = None  # ADDED: Configurable SNS topic name
 
     # Local testing configuration
     local_test_enabled: bool = False
@@ -56,6 +57,7 @@ class DeployConfig:
     # Environment variable configuration
     required_env_vars: Set[str] = field(default_factory=set)
     allowed_env_prefixes: Set[str] = field(default_factory=set)
+    env_file_path: Optional[Path] = None  # ADDED: Custom env file path
 
     # Derived properties
     account_id: Optional[str] = field(default=None, init=False)
@@ -65,11 +67,9 @@ class DeployConfig:
         """Initialize derived properties"""
         self.package_path = self.output_dir / self.package_name
 
-        # Load .env file if available
-        if load_dotenv:
-            env_file = Path('.env')
-            if env_file.exists():
-                load_dotenv(env_file, override=True)
+        # Set default budget topic name if not provided
+        if not self.budget_topic_name and self.function_name:
+            self.budget_topic_name = f"{self.function_name}-budget-alerts"
 
     @property
     def lambda_arn(self) -> str:
@@ -92,19 +92,24 @@ class DeployConfig:
         """
         env_vars = {}
 
-        # Load .env file
-        if load_dotenv:
-            env_file = Path('.env')
-            if not env_file.exists():
-                raise FileNotFoundError(".env file not found")
+        # Determine which .env file to load
+        env_file = self._get_env_file_path()
+
+        # Load .env file if available
+        if load_dotenv and env_file.exists():
             load_dotenv(env_file, override=True)
+            self._log_env_loaded(env_file)
+        elif not self.local_test_enabled and not self.dry_run:
+            # Only require .env for real deployments
+            raise FileNotFoundError(f".env file not found at {env_file}")
 
         # Add required environment variables
         for var_name in self.required_env_vars:
             value = os.getenv(var_name)
             if value:
                 env_vars[var_name] = value
-            else:
+            elif not self.local_test_enabled:
+                # Only enforce required vars for real deployments
                 raise ValueError(f"Required environment variable not found: {var_name}")
 
         # Add variables with allowed prefixes
@@ -118,6 +123,18 @@ class DeployConfig:
         self._log_env_summary(env_vars)
 
         return env_vars
+
+    def _get_env_file_path(self) -> Path:
+        """Get the path to the .env file"""
+        if self.env_file_path:
+            return self.env_file_path
+        return Path('.env')
+
+    def _log_env_loaded(self, env_file: Path) -> None:
+        """Log that environment file was loaded"""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"✅ Loaded environment from {env_file}")
 
     def _log_env_summary(self, env_vars: Dict[str, str]) -> None:
         """Log environment variable summary"""
