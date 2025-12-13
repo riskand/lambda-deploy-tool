@@ -139,7 +139,7 @@ class LambdaBuilder:
             # Tests
             'tests', 'test',
             # Other
-            '.DS_Store', 'node_modules', '.pytest_cache', 'coverage'
+            '.DS_Store', 'node_modules', '.pytest_cache', 'coverage', "response.json"
         }
 
         name = item.name
