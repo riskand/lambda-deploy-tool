@@ -63,26 +63,27 @@ class LambdaBuilder:
         """Install Python dependencies using pip"""
         logger.info("📦 Installing dependencies...")
 
-        requirements_file = Path('requirements.txt')
+        requirements_file = Path("requirements.txt")
         if not requirements_file.exists():
             raise FileNotFoundError("requirements.txt not found")
 
         cmd = [
-            sys.executable, '-m', 'pip', 'install',
-            '-r', str(requirements_file),
-            '--target', str(self.package_dir),
-            '--no-cache-dir',
-            '--quiet'
+            sys.executable, "-m", "pip", "install",
+            "-r", str(requirements_file),
+            "--target", str(self.package_dir),
+            "--ignore-installed",  
+            "--no-cache-dir",
+            "--quiet",
         ]
 
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
             logger.info("✅ Dependencies installed")
         except subprocess.CalledProcessError as e:
-            logger.error(f"❌ Failed to install dependencies")
+            logger.error("❌ Failed to install dependencies")
             logger.error(f"   stdout: {e.stdout}")
             logger.error(f"   stderr: {e.stderr}")
-            if not os.getenv('GITLAB_TOKEN'):
+            if not os.getenv("GITLAB_TOKEN"):
                 logger.error("💡 This might be due to missing GITLAB_TOKEN")
             raise
 
