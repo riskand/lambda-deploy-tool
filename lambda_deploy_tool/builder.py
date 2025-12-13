@@ -71,7 +71,7 @@ class LambdaBuilder:
             sys.executable, "-m", "pip", "install",
             "-r", str(requirements_file),
             "--target", str(self.package_dir),
-            "--ignore-installed",  
+            "--ignore-installed",
             "--no-cache-dir",
             "--quiet",
         ]
