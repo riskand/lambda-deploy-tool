@@ -93,6 +93,7 @@ class ContainerBuilder:
         # Build command
         cmd = [
             'docker', 'build',
+            '--no-cache', 
             '-t', self.config.ecr_repository_uri,
             '-f', str(self.config.dockerfile_path),
             str(self.config.docker_context)
