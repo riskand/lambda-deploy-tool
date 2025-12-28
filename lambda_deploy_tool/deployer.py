@@ -1,6 +1,6 @@
-# lambda_deploy_tool/deployer.py (GENERIC - UPDATED WITH SUMMARY)
+# lambda_deploy_tool/deployer.py
 """
-Generic deployment orchestrator
+Generic deployment orchestrator - UPDATED with schedule description support
 """
 import logging
 from pathlib import Path
@@ -138,7 +138,7 @@ class Deployer:
                 budget_limit=self.config.budget_limit,
                 email=self.config.budget_email,
                 budget_action_role_arn=budget_role_arn,
-                sns_topic_name=self.config.budget_topic_name  # ADDED: Pass topic name
+                sns_topic_name=self.config.budget_topic_name
             )
 
         except Exception as e:
@@ -235,11 +235,23 @@ class Deployer:
             scheduler_role_name = f'{self.config.function_name}-schedule-role'
             scheduler_role_arn = f"arn:aws:iam::{self.config.account_id}:role/{scheduler_role_name}"
 
+            # Get optional schedule timezone from config (if supported)
+            schedule_timezone = getattr(self.config, 'schedule_timezone', None)
+
+            # Get optional schedule description (default to function name)
+            schedule_description = getattr(
+                self.config,
+                'schedule_description',
+                f'{self.config.function_name} execution schedule'
+            )
+
             self.scheduler_mgr.ensure_schedule(
                 schedule_name=self.config.schedule_name,
                 schedule_expression=self.config.schedule_expression,
                 target_arn=self.config.lambda_arn,
-                role_arn=scheduler_role_arn
+                role_arn=scheduler_role_arn,
+                schedule_timezone=schedule_timezone,
+                description=schedule_description
             )
 
         except Exception as e:
@@ -265,8 +277,8 @@ class Deployer:
             return
 
         # Show next steps
-        logger.info("\n📝 Next Steps:")
-        logger.info(f"  Test: aws lambda invoke --function-name {self.config.function_name} response.json")
+        logger.info("\n🔍 Next Steps:")
+        logger.info(f"  Test: aws lambda invoke --function-name {self.config.function_name} --region {self.config.region} response.json")
         logger.info(f"  Logs: aws logs tail /aws/lambda/{self.config.function_name} --follow")
         logger.info(
             f"  Monitor: https://console.aws.amazon.com/lambda/home?region={self.config.region}#/functions/{self.config.function_name}")
