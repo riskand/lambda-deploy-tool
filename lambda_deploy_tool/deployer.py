@@ -1,6 +1,6 @@
 # lambda_deploy_tool/deployer.py
 """
-Generic deployment orchestrator - UPDATED with schedule description support
+Generic deployment orchestrator - UPDATED with EventBridge Scheduler permission fix
 """
 import logging
 from pathlib import Path
@@ -227,6 +227,35 @@ class Deployer:
             logger.error(f"❌ Lambda deployment failed: {e}")
             raise
 
+    def _add_scheduler_permission_to_lambda(self) -> None:
+        """
+        Add EventBridge Scheduler permission to Lambda function
+        This is the FIX for the missing permission issue
+        """
+        logger.info("🔐 Adding EventBridge Scheduler permission to Lambda...")
+
+        schedule_arn = f"arn:aws:scheduler:{self.config.region}:{self.config.account_id}:schedule/default/{self.config.schedule_name}"
+
+        try:
+            if self.config.dry_run:
+                logger.info("[DRY-RUN] Would add EventBridge Scheduler permission to Lambda")
+                return
+
+            self.lambda_mgr.client.add_permission(
+                FunctionName=self.config.function_name,
+                StatementId='AllowEventBridgeScheduler',
+                Action='lambda:InvokeFunction',
+                Principal='scheduler.amazonaws.com',
+                SourceArn=schedule_arn
+            )
+            logger.info("✅ EventBridge Scheduler permission added to Lambda")
+
+        except self.lambda_mgr.client.exceptions.ResourceConflictException:
+            logger.info("✅ EventBridge Scheduler permission already exists")
+        except Exception as e:
+            logger.error(f"❌ Failed to add EventBridge Scheduler permission: {e}")
+            raise
+
     def _setup_schedule(self) -> None:
         """Setup EventBridge schedule with error handling"""
         logger.info("⏰ Setting up EventBridge Schedule")
@@ -234,6 +263,9 @@ class Deployer:
         try:
             scheduler_role_name = f'{self.config.function_name}-schedule-role'
             scheduler_role_arn = f"arn:aws:iam::{self.config.account_id}:role/{scheduler_role_name}"
+
+            # ✅ ADD PERMISSION FIRST (before creating/updating schedule)
+            self._add_scheduler_permission_to_lambda()
 
             # Get optional schedule timezone from config (if supported)
             schedule_timezone = getattr(self.config, 'schedule_timezone', None)
@@ -278,8 +310,9 @@ class Deployer:
 
         # Show next steps
         logger.info("\n🔍 Next Steps:")
-        logger.info(f"  Test: aws lambda invoke --function-name {self.config.function_name} --region {self.config.region} response.json")
-        logger.info(f"  Logs: aws logs tail /aws/lambda/{self.config.function_name} --follow")
+        logger.info(f"  Test: aws lambda invoke --function-name {self.config.function_name} --region {self.config.region} --invocation-type Event response.json")
+        logger.info(f"  Logs: aws logs tail /aws/lambda/{self.config.function_name} --region {self.config.region} --follow")
+
         logger.info(
             f"  Monitor: https://console.aws.amazon.com/lambda/home?region={self.config.region}#/functions/{self.config.function_name}")
 
